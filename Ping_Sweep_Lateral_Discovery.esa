@@ -1,0 +1,23 @@
+/*
+Version: 3
+*/
+
+module Module_5c867bea45ce80222580c557;
+
+
+@Name('Module_5c867bea45ce80222580c557_Alert')
+@RSAAlert(oneInSeconds=0, identifiers={"ip_src"})
+
+SELECT * FROM Event(
+            /* Statement: sweep */
+    (
+		medium = 1  
+		AND ip_proto = 1 
+		AND streams IS NOT NULL 
+		AND direction.toLowerCase() IN ( 'lateral' ) 
+		AND isOneOfIgnoreCase(action,{ 'echo' }))
+	)
+	.std:groupwin(ip_src)
+	.win:time_length_batch(60 seconds, 100)
+	.std:unique(ip_dst) 
+	GROUP BY ip_src HAVING COUNT(*) = 100;

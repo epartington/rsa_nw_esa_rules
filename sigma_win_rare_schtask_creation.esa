@@ -1,0 +1,22 @@
+/*
+Rule Name: sigma_win_rare_schtask_creation
+Author: Eric Partington
+Modified: 2019-03-12
+version: 1
+tags:
+    - attack.persistence
+    - attack.privilege_escalation
+    - attack.t1050
+*/
+
+Select * from Event
+(
+    device_class.toLowerCase() IN ( 'windows hosts' ) AND 
+    reference_id.toLowerCase() IN ( '106' ) AND
+    event_source.toLowerCase() IN ( 'Microsoft-Windows-TaskScheduler' ) AND
+    process IS NOT NULL
+).win:time_batch(168 hours) 
+/* 7 days in hours */
+group by process
+/*  process looks like this \Microsoft\Windows\UpdateOrchestrator\Schedule Retry Scan */
+having count(*) < 5

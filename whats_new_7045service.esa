@@ -1,0 +1,47 @@
+/*
+Rule Name: whats_new_7045service
+Author: Eric Partington
+Modified: 2019-02-22
+version: 2
+tags:
+    - attack.persistence
+    - attack.privilege_escalation
+    - attack.t1050
+*/
+
+//Update learning phase to desired number of days
+@Name('Named Window - learningWindow')
+//@RSAPersist	
+CREATE VARIABLE integer lPhaseInDays7045 = 1;
+CREATE WINDOW lPhaseWNWinRareService.win:length(1) (learningPhase long);
+INSERT INTO lPhaseWNWinRareService
+SELECT current_timestamp.plus(lPhaseInDays7045 days) as learningPhase FROM PATTERN[Event];
+
+
+//Window to Store New Data
+@Name('Named Window - whatsNew')
+@RSAPersist(serialization=Serialization.JSON)
+CREATE WINDOW whatsNew7045Service.win:keepall().std:unique(service_name) (service_name string, event_user string, directory string, event_computer string, alias_host string, time long, medium short);
+
+
+//store in the window
+@Name('Insert 7045Service')
+INSERT INTO whatsNew7045Service
+SELECT service_name, event_user, directory, event_computer, cast(alias_host, string) as alias_host, time, medium  FROM 
+Event(
+device_class.toLowerCase() IN ( 'windows hosts' ) AND 
+reference_id.toLowerCase() IN ( '7045' ) AND
+service_name IS NOT NULL
+);
+
+//compare to services stored in the window
+@RSAAlert
+SELECT service_name, event_user, directory, event_computer, cast(alias_host, string) as alias_host, time, medium FROM 
+Event(
+    device_class.toLowerCase() IN ( 'windows hosts' ) AND 
+    reference_id.toLowerCase() IN ( '7045' ) AND
+    service_name NOT IN (SELECT service_name FROM whatsNew7045Service) AND 
+    service_name IS NOT NULL AND 
+    current_timestamp > (SELECT learningPhase FROM lPhaseWNWinRareService)
+)
+OUTPUT ALL EVERY 1 hours;

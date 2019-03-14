@@ -1,0 +1,19 @@
+/*
+Rule Name: sigma_win_rare_service_installs
+Author: Eric Partington
+Modified: 2019-02-22
+version: 1
+tags:
+    - attack.persistence
+    - attack.privilege_escalation
+    - attack.t1050
+*/
+
+Select * from Event
+(
+    device_class.toLowerCase() IN ( 'windows hosts' ) AND 
+    reference_id.toLowerCase() IN ( '7045' ) AND
+    service_name IS NOT NULL
+).win:time_batch(24 hours) 
+group by service_name
+having count(*) < 6

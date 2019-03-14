@@ -1,0 +1,48 @@
+/*
+Rule Name: whats_new_5145fileaudit
+Author: Eric Partington
+Modified: 2019-03-11
+version: 1
+tags:
+    - 
+*/
+
+//Update learning phase to desired number of days
+@Name('Named Window - learningWindow')
+//@RSAPersist	
+CREATE VARIABLE integer lPhaseInDays5145 = 1;
+CREATE WINDOW lPhaseWNWinIPCAccess.win:length(1) (learningPhase long);
+INSERT INTO lPhaseWNWinIPCAccess
+SELECT current_timestamp.plus(lPhaseInDays5145 days) as learningPhase FROM PATTERN[Event];
+
+
+//Window to Store New Data
+@Name('Named Window - whatsNew5145')
+@RSAPersist(serialization=Serialization.JSON)
+CREATE WINDOW whatsNew5145fileaudit.win:keepall().std:unique(filename) (filename string, obj_name string, ip_src string, event_computer string, alias_host string, time long, medium short);
+
+
+//store in the window
+@Name('Insert 7045Service')
+INSERT INTO whatsNew5145fileaudit
+SELECT filename, obj_name, ip_src, event_computer, cast(alias_host, string) as alias_host, time, medium  FROM 
+Event(
+    device_class.toLowerCase() IN ( 'windows hosts' ) AND 
+    reference_id.toLowerCase() IN ( '5145' ) AND
+    filename IS NOT NULL AND
+    /*filename NOT IN ('lsarpc','samr','netlogon','netlogon','protected_storage','winreg','srvsvc','svcctl') AND*/
+    obj_name IN ('\\\\*\\IPC$')
+);
+
+//compare to services stored in the window
+@RSAAlert
+SELECT filename, obj_name, ip_src, event_computer, cast(alias_host, string) as alias_host, time, medium FROM 
+Event(
+    device_class.toLowerCase() IN ( 'windows hosts' ) AND 
+    reference_id.toLowerCase() IN ( '5145' ) AND
+    filename NOT IN (SELECT filename FROM whatsNew5145fileaudit) AND 
+    filename IS NOT NULL AND 
+    obj_name IN ('\\\\*\\IPC$') AND
+    current_timestamp > (SELECT learningPhase FROM lPhaseWNWinIPCAccess)
+)
+OUTPUT ALL EVERY 1 hours;
